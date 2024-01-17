@@ -1,6 +1,14 @@
-use std::arch::asm;
-use std::ffi::CString;
-use std::slice;
+#![no_std]
+#![no_main]
+
+#[allow(unused_imports)]
+use libc;
+
+use core::arch::asm;
+use core::ffi::CStr;
+use core::panic::PanicInfo;
+use core::slice;
+use core::str::from_utf8_unchecked;
 
 // Yoinked from https://docs.rs/libc/latest/src/libc/unix/linux_like/linux/gnu/b64/x86_64/mod.rs.html
 type DevT = u64;
@@ -56,7 +64,7 @@ fn fstat(fd: i64) -> Stat {
 }
 
 fn open(path: &str) -> i64 {
-    let path = CString::new(path).unwrap();
+    let path = CStr::from_bytes_until_nul(path.as_bytes()).unwrap();
     let mut fd: i64;
 
     unsafe {
@@ -161,7 +169,7 @@ impl<'a> IntoIterator for &'a MReader {
     fn into_iter(self) -> Self::IntoIter {
         MReaderIter {
             data: unsafe {
-                std::str::from_utf8_unchecked(slice::from_raw_parts(
+                from_utf8_unchecked(slice::from_raw_parts(
                     self.maddr as *const u8,
                     self.stat.st_size as usize,
                 ))
@@ -191,9 +199,40 @@ impl<'a> Iterator for MReaderIter<'a> {
     }
 }
 
-fn main() {
-    let lines = MReader::new("Cargo.toml");
-    for line in lines.into_iter() {
-        println!("{}", line);
+fn writeln(line: &str) {
+    unsafe {
+        let lineptr = line.as_bytes().as_ptr();
+        let linelen = line.len();
+        asm!(
+            "syscall",
+            in("rax") 1,
+            in("rdi") 1, // stdout
+            in("rsi") lineptr,
+            in("rdx") linelen,
+        );
+
+        let nl = "\n".as_bytes().as_ptr();
+        asm!(
+            "syscall",
+            in("rax") 1,
+            in("rdi") 1, // stdout
+            in("rsi") nl,
+            in("rdx") 1,
+        );
     }
+}
+
+#[no_mangle]
+pub extern "C" fn main(_argc: isize, _argv: *const *const u8) -> isize {
+    let lines = MReader::new("Cargo.toml\0");
+    for line in lines.into_iter() {
+        writeln(line);
+    }
+
+    0
+}
+
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    loop {}
 }
