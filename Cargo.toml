@@ -12,4 +12,3 @@ panic = "abort"
 panic = "abort"
 
 [dependencies]
-libc = { version = "0.2", default-features = false }
