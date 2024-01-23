@@ -10,5 +10,9 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+opt-level = 'z'   # Optimize for size.
+lto = true        # Enable Link Time Optimisation
+codegen-units = 1 # Reduced to increase optimisations.
+strip = "symbols" # Strip symbols from binary
 
 [dependencies]
